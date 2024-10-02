@@ -1,0 +1,4 @@
+[settings]
+computer_name = "MyPC"
+zip_file = "files.zip"
+startup_script = "startup_script.sh"
