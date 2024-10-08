@@ -70,11 +70,19 @@ def load_config(config_file="config.toml"):
         print(f"Ошибка при чтении конфигурации: {e}")
         return None, None, None
 
-# Выполнение стартового скрипта
-def execute_startup_script(startup_script):
+# Выполнение команд из стартового скрипта
+def execute_startup_script(startup_script, emulator):
     if startup_script and os.path.isfile(startup_script):
         print(f"Выполнение стартового скрипта: {startup_script}")
-        os.system(f"bash {startup_script}")
+        with open(startup_script, 'r') as script_file:
+            commands = script_file.readlines()
+            for command in commands:
+                command = command.strip()
+                if command:
+                    print(f"Выполнение команды: {command}")
+                    result = emulator.run(command)
+                    if result:
+                        print("\n".join(result))
     else:
         print("Стартовый скрипт не найден или не указан.")
 
@@ -86,8 +94,10 @@ if __name__ == "__main__":
     if not zip_file_path:
         print("Ошибка загрузки конфигурационного файла. Завершение работы.")
     else:
+        emulator = ZipEmulator(zip_file_path)
+
         # Выполняем стартовый скрипт, если он есть
-        execute_startup_script(startup_script)
+        execute_startup_script(startup_script, emulator)
 
         # Запрашиваем у пользователя имя компьютера
         computer_name = input(f"Введите имя компьютера (по умолчанию: {default_computer_name}): ")
@@ -95,8 +105,6 @@ if __name__ == "__main__":
         # Если пользователь не ввел имя, используем значение по умолчанию
         if not computer_name.strip():
             computer_name = default_computer_name
-
-        emulator = ZipEmulator(zip_file_path)
 
         while True:
             # Ввод команды с отображением имени компьютера
