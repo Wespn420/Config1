@@ -1,39 +1,24 @@
 import unittest
-from visual_graph import get_commits, build_dependency_graph
-from graphviz import Digraph
+from unittest.mock import patch, MagicMock
+from pathlib import Path
+# Импортируем функции из основного файла
+from dependency_visualizer import get_git_commits, generate_dot_graph, save_graph_to_file
 
-class TestDependencyGraph(unittest.TestCase):
-    def test_get_commits(self):
-        """
-        Тест для функции get_commits: проверяем, что функция правильно парсит данные коммитов.
-        """
-        # Моковые данные, представляющие вывод git log
-        mock_data = "abc123 def456\ndef456\n"
-        
-        # Подмена вывода subprocess.run с использованием моковых данных
-        with unittest.mock.patch("subprocess.run") as mock_run:
-            mock_run.return_value.stdout = mock_data
-            result = get_commits("dummy_repo_path")
-        
-        expected_result = {
-            "abc123": ["def456"],
-            "def456": []
-        }
-        self.assertEqual(result, expected_result)
+class TestDependencyVisualizer(unittest.TestCase):
+    
+    @patch('subprocess.run')
+    def test_get_git_commits(self, mock_run):
+        mock_run.return_value.stdout = "a1b2c3d4\nb1c2d3e4 a1b2c3d4\n"
+        commits = get_git_commits('/fake/repo')
+        self.assertEqual(commits, {'a1b2c3d4': [], 'b1c2d3e4': ['a1b2c3d4']})
 
-    def test_build_dependency_graph(self):
-        """
-        Тест для функции build_dependency_graph: проверяем, что граф строится корректно.
-        """
-        # Моковые данные для коммитов и зависимостей
-        commits = {
-            "abc123": ["def456"],
-            "def456": []
-        }
-        
-        graph = build_dependency_graph(commits)
-        
-        # Проверяем, что созданный граф является экземпляром Digraph
-        self.assertIsInstance(graph, Digraph)
-        
-        # Проверяем, что узлы и
+    def test_generate_dot_graph(self):
+        commits = {'a1b2c3d4': [], 'b1c2d3e4': ['a1b2c3d4']}
+        dot_graph = generate_dot_graph(commits)
+        expected_dot = 'digraph G {\n    "a1b2c3d4" -> "b1c2d3e4";\n}'
+        self.assertIn(expected_dot, dot_graph)
+
+    @patch('subprocess.run')
+    def test_save_graph_to_file(self, mock_run):
+        dot_graph = 'digraph G {\n    "a1b2c3d4" -> "b1c2d3e4";\n}'
+        output_path = '/fake/path/output.png'
