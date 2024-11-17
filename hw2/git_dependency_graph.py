@@ -1,7 +1,7 @@
 import os
-import subprocess
-import argparse
 from graphviz import Digraph
+import zlib
+
 
 class GitDependencyGraph:
     def __init__(self, repo_path, output_path, graphviz_path):
@@ -10,38 +10,78 @@ class GitDependencyGraph:
         self.graphviz_path = graphviz_path
         self.dependencies = {}
 
-    def collect_dependencies(self):
-        """Извлекает информацию о коммитах и их родительских коммитах."""
-        try:
-            # Проверяем наличие репозитория
-            if not os.path.isdir(self.repo_path):
-                raise FileNotFoundError(f"Путь к репозиторию не найден: {self.repo_path}")
-            os.chdir(self.repo_path)
+    def get_git_dir(self):
+        """Находит директорию .git в указанном репозитории."""
+        git_dir = os.path.join(self.repo_path, ".git")
+        if not os.path.isdir(git_dir):
+            raise FileNotFoundError(f"Каталог .git не найден в репозитории: {self.repo_path}")
+        return git_dir
 
-            # Получаем список коммитов с родительскими коммитами
-            log_output = subprocess.check_output(
-                ["git", "log", "--pretty=format:%H %P"],
-                text=True
-            )
-            # Обрабатываем вывод, чтобы построить словарь зависимостей
-            for line in log_output.strip().split('\n'):
-                commit_hash, *parents = line.split()
-                self.dependencies[commit_hash] = parents
-        except subprocess.CalledProcessError as e:
-            print("Ошибка при получении истории коммитов:", e)
-            return False
-        except FileNotFoundError as e:
-            print(e)
-            return False
+    def read_object(self, sha):
+        """Читает объект Git из .git/objects."""
+        git_dir = self.get_git_dir()
+        obj_dir = os.path.join(git_dir, "objects", sha[:2])  # Первые два символа — подпапка
+        obj_path = os.path.join(obj_dir, sha[2:])  # Остальная часть — имя файла
+        if not os.path.isfile(obj_path):
+            raise FileNotFoundError(f"Объект {sha} не найден в репозитории.")
+        with open(obj_path, "rb") as f:
+            compressed_data = f.read()
+            data = zlib.decompress(compressed_data)
+        return data
+
+    def parse_commit(self, data):
+        """Парсит содержимое объекта коммита."""
+        lines = data.decode().split("\n")
+        parents = []
+        for line in lines:
+            if line.startswith("parent "):
+                parents.append(line.split()[1])  # SHA родительского коммита
+            elif line == "":  # Конец заголовков
+                break
+        return parents
+
+    def collect_dependencies(self):
+        """Собирает зависимости коммитов, обходя историю из HEAD."""
+        git_dir = self.get_git_dir()
+        head_path = os.path.join(git_dir, "HEAD")
+        if not os.path.isfile(head_path):
+            raise FileNotFoundError("Файл HEAD не найден. Репозиторий повреждён?")
+
+        # Получаем текущую ссылку (ref) или SHA коммита
+        with open(head_path, "r") as f:
+            ref = f.readline().strip()
+        if ref.startswith("ref:"):
+            ref_path = os.path.join(git_dir, ref[5:])
+            if not os.path.isfile(ref_path):
+                raise FileNotFoundError(f"Файл ref {ref_path} не найден.")
+            with open(ref_path, "r") as f:
+                current_commit = f.readline().strip()
+        else:
+            current_commit = ref  # Если в HEAD уже прямой SHA
+
+        # Рекурсивно обходим историю коммитов
+        to_visit = [current_commit]
+        visited = set()
+
+        while to_visit:
+            sha = to_visit.pop()
+            if sha in visited:
+                continue
+            visited.add(sha)
+
+            try:
+                data = self.read_object(sha)
+                parents = self.parse_commit(data)
+                self.dependencies[sha] = parents
+                to_visit.extend(parents)  # Добавляем родителей для дальнейшего обхода
+            except Exception as e:
+                print(f"Ошибка при обработке коммита {sha}: {e}")
+
         return True
 
     def build_graph(self):
-        """Строит граф зависимостей в формате DOT и сохраняет в файл PNG."""
+        """Создаёт граф зависимости в формате DOT и сохраняет в файл."""
         dot = Digraph(comment="Git Dependency Graph", format="png")
-
-        # Добавляем папку Graphviz в PATH, если она указана
-        if self.graphviz_path:
-            os.environ["PATH"] += os.pathsep + self.graphviz_path
 
         # Добавляем узлы и связи в граф
         for commit, parents in self.dependencies.items():
@@ -49,64 +89,34 @@ class GitDependencyGraph:
             for parent in parents:
                 dot.edge(commit, parent)
 
-        # Сохраняем граф в PNG
+        # Указываем путь к Graphviz
+        dot.engine = "dot"
         dot.render(self.output_path, cleanup=True)
 
     def generate_dependency_graph(self):
         """Главная функция для генерации графа зависимостей."""
-        print(f"Начинаем обработку репозитория: {self.repo_path}")
-        print(f"Файл графа зависимостей будет сохранён в: {self.output_path}.png")
-        if self.graphviz_path:
-            print(f"Используется Graphviz по пути: {self.graphviz_path}")
-
         if self.collect_dependencies():
+            print(f"Зависимости успешно собраны. Создаём граф...")
             self.build_graph()
-            print("Граф зависимостей успешно сохранён!")
+            print(f"Граф зависимостей успешно сохранён в: {self.output_path}.png")
         else:
             print("Не удалось создать граф зависимостей.")
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Git Dependency Graph Visualizer")
-    parser.add_argument("--output_path", help="Путь к файлу с изображением графа зависимостей (без расширения)")
-    parser.add_argument("--repo_path", help="Путь к анализируемому git-репозиторию")
-    parser.add_argument("--graphviz_path", help="Путь к программе для визуализации графов Graphviz")
+    # Запрос путей у пользователя
+    graphviz_path = input("Введите путь к программе Graphviz (например, C:\\Program Files\\Graphviz\\bin): ").strip()
+    repo_path = input("Введите путь к анализируемому git-репозиторию: ").strip()
+    output_path = input("Введите путь для сохранения изображения графа (без расширения): ").strip()
 
-    args = parser.parse_args()
+    print(f"\nНачинаем обработку репозитория: {repo_path}")
+    print(f"Файл графа зависимостей будет сохранён в: {output_path}.png")
+    print(f"Используется Graphviz по пути: {graphviz_path}")
 
-    # Проверка и запрос пути к Graphviz
-    graphviz_path = args.graphviz_path
-    if not graphviz_path:
-        graphviz_path = input("Введите путь к программе Graphviz (например, C:\\Program Files\\Graphviz\\bin): ").strip()
-
-    # Проверка и запрос пути к репозиторию
-    repo_path = args.repo_path
-    if not repo_path:
-        repo_path = input("Введите путь к анализируемому git-репозиторию: ").strip()
-
-    # Проверка и запрос пути к файлу с изображением
-    output_path = args.output_path
-    if not output_path:
-        output_path = input("Введите путь для сохранения изображения графа (без расширения): ").strip()
-
-    # Проверяем существование пути к репозиторию
-    if not os.path.isdir(repo_path):
-        print(f"Ошибка: Указанный путь к репозиторию не существует: {repo_path}")
-        return
-
-    # Проверяем, что путь сохранения не является директорией
-    if os.path.isdir(output_path):
-        print(f"Ошибка: Указанный путь {output_path} является директорией. Укажите имя файла без расширения.")
-        return
-
-    # Проверяем, что родительский каталог для файла с изображением существует
-    output_dir = os.path.dirname(output_path)
-    if output_dir and not os.path.exists(output_dir):
-        print(f"Ошибка: Путь к выходному файлу не существует: {output_dir}")
-        return
-
-    # Создаем объект и генерируем граф
+    # Создаём объект графа и запускаем процесс
     graph = GitDependencyGraph(repo_path, output_path, graphviz_path)
     graph.generate_dependency_graph()
+
 
 if __name__ == "__main__":
     main()
