@@ -1,94 +1,103 @@
 import unittest
 import os
-from unittest.mock import patch, MagicMock
+import shutil
 from git_dependency_graph import GitDependencyGraph
 
+
 class TestGitDependencyGraph(unittest.TestCase):
-
     def setUp(self):
-        """Настройка перед каждым тестом."""
+        """Настройка перед каждым тестом: создаём тестовый репозиторий."""
         self.test_repo_path = "test_repo"
-        self.test_output_path = "test_output_graph"
-        self.test_graphviz_path = "/usr/bin"
+        self.output_path = "test_output_graph"
+        self.graphviz_path = "/usr/bin"
 
-        # Создаем тестовый объект GitDependencyGraph
-        self.graph = GitDependencyGraph(
-            repo_path=self.test_repo_path,
-            output_path=self.test_output_path,
-            graphviz_path=self.test_graphviz_path
-        )
+        # Создаём каталог для тестового репозитория
+        os.makedirs(self.test_repo_path, exist_ok=True)
+        git_dir = os.path.join(self.test_repo_path, ".git")
+        os.makedirs(git_dir, exist_ok=True)
 
-    def test_collect_dependencies_success(self):
-        """Тест успешного сбора зависимостей из git-репозитория."""
-        # Mock для subprocess.check_output
-        mock_output = "abc123 def456\ndef456 ghi789"
-        with patch("subprocess.check_output", return_value=mock_output):
-            success = self.graph.collect_dependencies()
-        
-        self.assertTrue(success)
-        self.assertIn("abc123", self.graph.dependencies)
-        self.assertEqual(self.graph.dependencies["abc123"], ["def456"])
-        self.assertIn("def456", self.graph.dependencies)
-        self.assertEqual(self.graph.dependencies["def456"], ["ghi789"])
+        # Создаём фиктивный HEAD и несколько объектов
+        with open(os.path.join(git_dir, "HEAD"), "w") as f:
+            f.write("ref: refs/heads/master\n")
 
-    def test_collect_dependencies_git_error(self):
-        """Тест ошибки при вызове git log."""
-        with patch("subprocess.check_output", side_effect=Exception("Git Error")):
-            success = self.graph.collect_dependencies()
-        self.assertFalse(success)
-        self.assertEqual(self.graph.dependencies, {})
+        refs_heads_dir = os.path.join(git_dir, "refs", "heads")
+        os.makedirs(refs_heads_dir, exist_ok=True)
 
-    def test_collect_dependencies_invalid_repo_path(self):
-        """Тест обработки ошибки, если путь к репозиторию неверен."""
-        with patch("os.chdir", side_effect=FileNotFoundError("Path not found")):
-            success = self.graph.collect_dependencies()
-        self.assertFalse(success)
+        # Добавляем фиктивный коммит
+        commit_sha = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"
+        self.create_git_object(commit_sha, b"commit 1234\0parent abcdef1234567890\n\nTest commit")
 
-    def test_build_graph_success(self):
-        """Тест успешного построения графа зависимостей."""
-        # Устанавливаем фиктивные зависимости
-        self.graph.dependencies = {
-            "abc123": ["def456"],
-            "def456": ["ghi789"],
-        }
+        with open(os.path.join(refs_heads_dir, "master"), "w") as f:
+            f.write(commit_sha)
 
-        # Mock для render
-        with patch("graphviz.Digraph.render") as mock_render:
-            self.graph.build_graph()
-        
-        mock_render.assert_called_once_with(self.test_output_path, cleanup=True)
+        # Создаём объект графа
+        self.graph = GitDependencyGraph(self.test_repo_path, self.output_path, self.graphviz_path)
 
-    def test_build_graph_no_dependencies(self):
-        """Тест построения графа при отсутствии зависимостей."""
-        self.graph.dependencies = {}
-        with patch("graphviz.Digraph.render") as mock_render:
-            self.graph.build_graph()
-        mock_render.assert_called_once_with(self.test_output_path, cleanup=True)
+    def create_git_object(self, sha, content):
+        """Создаёт объект Git в каталоге objects."""
+        git_objects_dir = os.path.join(self.test_repo_path, ".git", "objects", sha[:2])
+        os.makedirs(git_objects_dir, exist_ok=True)
+        object_path = os.path.join(git_objects_dir, sha[2:])
+        with open(object_path, "wb") as f:
+            f.write(zlib.compress(content))
 
-    def test_generate_dependency_graph_success(self):
-        """Тест успешного выполнения полного цикла генерации графа."""
-        # Mock для функций collect_dependencies и build_graph
-        with patch.object(self.graph, "collect_dependencies", return_value=True) as mock_collect:
-            with patch.object(self.graph, "build_graph") as mock_build:
-                self.graph.generate_dependency_graph()
+    def tearDown(self):
+        """Удаляет тестовые данные после каждого теста."""
+        shutil.rmtree(self.test_repo_path)
+        if os.path.exists(f"{self.output_path}.png"):
+            os.remove(f"{self.output_path}.png")
 
-        mock_collect.assert_called_once()
-        mock_build.assert_called_once()
+    def test_get_git_dir(self):
+        """Тестирует нахождение .git каталога."""
+        git_dir = self.graph.get_git_dir()
+        self.assertTrue(os.path.isdir(git_dir))
 
-    def test_generate_dependency_graph_collect_fail(self):
-        """Тест обработки ошибки при сборе зависимостей."""
-        with patch.object(self.graph, "collect_dependencies", return_value=False) as mock_collect:
-            with patch.object(self.graph, "build_graph") as mock_build:
-                self.graph.generate_dependency_graph()
+    def test_read_object(self):
+        """Тестирует чтение объекта Git."""
+        sha = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"
+        content = self.graph.read_object(sha)
+        self.assertIn(b"commit", content)
+        self.assertIn(b"parent", content)
 
-        mock_collect.assert_called_once()
-        mock_build.assert_not_called()
+    def test_parse_commit(self):
+        """Тестирует парсинг содержимого коммита."""
+        commit_data = b"commit 1234\0parent abcdef1234567890\n\nTest commit"
+        parents = self.graph.parse_commit(commit_data)
+        self.assertEqual(parents, ["abcdef1234567890"])
 
-    def test_path_integration(self):
-        """Тест корректного использования путей."""
-        self.assertEqual(self.graph.repo_path, self.test_repo_path)
-        self.assertEqual(self.graph.output_path, self.test_output_path)
-        self.assertEqual(self.graph.graphviz_path, self.test_graphviz_path)
+    def test_collect_dependencies(self):
+        """Тестирует сбор зависимостей."""
+        result = self.graph.collect_dependencies()
+        self.assertTrue(result)
+        self.assertIn("a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0", self.graph.dependencies)
+
+    def test_build_graph(self):
+        """Тестирует построение графа."""
+        self.graph.collect_dependencies()
+        self.graph.build_graph()
+        self.assertTrue(os.path.exists(f"{self.output_path}.png"))
+
+    def test_generate_dependency_graph(self):
+        """Тестирует полный процесс генерации графа зависимостей."""
+        self.graph.generate_dependency_graph()
+        self.assertTrue(os.path.exists(f"{self.output_path}.png"))
+
+    def test_invalid_repo_path(self):
+        """Тестирует ошибку при неправильном пути к репозиторию."""
+        invalid_graph = GitDependencyGraph("invalid_path", self.output_path, self.graphviz_path)
+        with self.assertRaises(FileNotFoundError):
+            invalid_graph.get_git_dir()
+
+    def test_user_input(self):
+        """Тестирует обработку пользовательского ввода."""
+        repo_path = "test_repo"
+        output_path = "test_output_graph"
+        graphviz_path = "/usr/bin"
+        graph = GitDependencyGraph(repo_path, output_path, graphviz_path)
+        self.assertEqual(graph.repo_path, repo_path)
+        self.assertEqual(graph.output_path, output_path)
+        self.assertEqual(graph.graphviz_path, graphviz_path)
+
 
 if __name__ == "__main__":
     unittest.main()
