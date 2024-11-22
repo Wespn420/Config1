@@ -4,10 +4,9 @@ import zlib
 
 
 class GitDependencyGraph:
-    def __init__(self, repo_path, output_path, graphviz_path):
+    def __init__(self, repo_path, output_path):
         self.repo_path = repo_path
         self.output_path = output_path
-        self.graphviz_path = graphviz_path
         self.dependencies = {}
 
     def get_git_dir(self):
@@ -81,6 +80,7 @@ class GitDependencyGraph:
 
     def build_graph(self):
         """Создаёт граф зависимости в формате DOT и сохраняет в файл."""
+        print("Создание графа зависимостей...")
         dot = Digraph(comment="Git Dependency Graph", format="png")
 
         # Добавляем узлы и связи в граф
@@ -89,32 +89,28 @@ class GitDependencyGraph:
             for parent in parents:
                 dot.edge(commit, parent)
 
-        # Указываем путь к Graphviz
-        dot.engine = "dot"
         dot.render(self.output_path, cleanup=True)
+        print(f"Граф зависимостей успешно сохранён в: {self.output_path}.png")
 
     def generate_dependency_graph(self):
         """Главная функция для генерации графа зависимостей."""
         if self.collect_dependencies():
             print(f"Зависимости успешно собраны. Создаём граф...")
             self.build_graph()
-            print(f"Граф зависимостей успешно сохранён в: {self.output_path}.png")
         else:
             print("Не удалось создать граф зависимостей.")
 
 
 def main():
     # Запрос путей у пользователя
-    graphviz_path = input("Введите путь к программе Graphviz (например, C:\\Program Files\\Graphviz\\bin): ").strip()
     repo_path = input("Введите путь к анализируемому git-репозиторию: ").strip()
     output_path = input("Введите путь для сохранения изображения графа (без расширения): ").strip()
 
     print(f"\nНачинаем обработку репозитория: {repo_path}")
     print(f"Файл графа зависимостей будет сохранён в: {output_path}.png")
-    print(f"Используется Graphviz по пути: {graphviz_path}")
 
     # Создаём объект графа и запускаем процесс
-    graph = GitDependencyGraph(repo_path, output_path, graphviz_path)
+    graph = GitDependencyGraph(repo_path, output_path)
     graph.generate_dependency_graph()
 
 
