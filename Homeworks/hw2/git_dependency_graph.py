@@ -1,12 +1,14 @@
 import os
-from graphviz import Digraph
 import zlib
+import argparse
+from graphviz import Digraph
 
 
 class GitDependencyGraph:
-    def __init__(self, repo_path, output_path):
+    def __init__(self, repo_path, output_path, graphviz_path):
         self.repo_path = repo_path
         self.output_path = output_path
+        self.graphviz_path = graphviz_path
         self.dependencies = {}
 
     def get_git_dir(self):
@@ -22,22 +24,55 @@ class GitDependencyGraph:
         obj_dir = os.path.join(git_dir, "objects", sha[:2])  # Первые два символа — подпапка
         obj_path = os.path.join(obj_dir, sha[2:])  # Остальная часть — имя файла
         if not os.path.isfile(obj_path):
-            raise FileNotFoundError(f"Объект {sha} не найден в репозитории.")
-        with open(obj_path, "rb") as f:
-            compressed_data = f.read()
-            data = zlib.decompress(compressed_data)
-        return data
+            print(f"Пропущен отсутствующий объект {sha}. Возможно, репозиторий повреждён.")
+            return None
+        try:
+            with open(obj_path, "rb") as f:
+                compressed_data = f.read()
+                data = zlib.decompress(compressed_data)
+            return data
+        except zlib.error as e:
+            print(f"Ошибка при декомпрессии объекта {sha}: {e}")
+            return None
 
     def parse_commit(self, data):
         """Парсит содержимое объекта коммита."""
-        lines = data.decode().split("\n")
-        parents = []
-        for line in lines:
-            if line.startswith("parent "):
-                parents.append(line.split()[1])  # SHA родительского коммита
-            elif line == "":  # Конец заголовков
-                break
-        return parents
+        if data is None:
+            return []
+        try:
+            lines = data.decode(errors="replace").split("\n")
+            parents = []
+            for line in lines:
+                if line.startswith("parent "):
+                    parents.append(line.split()[1])  # SHA родительского коммита
+                elif line == "":  # Конец заголовков
+                    break
+            return parents
+        except Exception as e:
+            print(f"Ошибка при разборе данных коммита: {e}")
+            return []
+
+    def check_repository_integrity(self):
+        """Проверяет, что репозиторий содержит хотя бы один коммит."""
+        git_dir = self.get_git_dir()
+        refs_heads_dir = os.path.join(git_dir, "refs", "heads")
+        if not os.path.isdir(refs_heads_dir):
+            print("Не найдено ни одной ветки в репозитории.")
+            return False
+
+        # Проверка наличия HEAD
+        head_path = os.path.join(git_dir, "HEAD")
+        if not os.path.isfile(head_path):
+            print("Файл HEAD отсутствует. Репозиторий повреждён.")
+            return False
+
+        # Проверка наличия объектов в .git/objects
+        objects_dir = os.path.join(git_dir, "objects")
+        if not os.path.isdir(objects_dir):
+            print("Каталог .git/objects отсутствует. Репозиторий повреждён.")
+            return False
+
+        return True
 
     def collect_dependencies(self):
         """Собирает зависимости коммитов, обходя историю из HEAD."""
@@ -70,11 +105,17 @@ class GitDependencyGraph:
 
             try:
                 data = self.read_object(sha)
+                if data is None:
+                    continue
                 parents = self.parse_commit(data)
                 self.dependencies[sha] = parents
                 to_visit.extend(parents)  # Добавляем родителей для дальнейшего обхода
             except Exception as e:
                 print(f"Ошибка при обработке коммита {sha}: {e}")
+
+        if not self.dependencies:
+            print("Не найдено ни одного коммита для анализа. Проверьте репозиторий.")
+            return False
 
         return True
 
@@ -89,28 +130,32 @@ class GitDependencyGraph:
             for parent in parents:
                 dot.edge(commit, parent)
 
+        # Указываем путь к Graphviz
+        dot.engine = "dot"
         dot.render(self.output_path, cleanup=True)
-        print(f"Граф зависимостей успешно сохранён в: {self.output_path}.png")
 
     def generate_dependency_graph(self):
         """Главная функция для генерации графа зависимостей."""
+        if not self.check_repository_integrity():
+            print("Репозиторий некорректен или повреждён.")
+            return
+
         if self.collect_dependencies():
             print(f"Зависимости успешно собраны. Создаём граф...")
             self.build_graph()
+            print(f"Граф зависимостей успешно сохранён в: {self.output_path}.png")
         else:
             print("Не удалось создать граф зависимостей.")
 
 
 def main():
-    # Запрос путей у пользователя
-    repo_path = input("Введите путь к анализируемому git-репозиторию: ").strip()
-    output_path = input("Введите путь для сохранения изображения графа (без расширения): ").strip()
+    parser = argparse.ArgumentParser(description="Генератор графа зависимостей Git.")
+    parser.add_argument("-r", "--repo", required=True, help="Путь к анализируемому git-репозиторию.")
+    parser.add_argument("-o", "--output", required=True, help="Путь для сохранения изображения графа (без расширения).")
+    parser.add_argument("-g", "--graphviz", required=True, help="Путь к программе Graphviz.")
+    args = parser.parse_args()
 
-    print(f"\nНачинаем обработку репозитория: {repo_path}")
-    print(f"Файл графа зависимостей будет сохранён в: {output_path}.png")
-
-    # Создаём объект графа и запускаем процесс
-    graph = GitDependencyGraph(repo_path, output_path)
+    graph = GitDependencyGraph(args.repo, args.output, args.graphviz)
     graph.generate_dependency_graph()
 
 
