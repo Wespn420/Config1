@@ -10,15 +10,20 @@ def parse_file(file_path):
     data = {}
     for line in lines:
         line = line.strip()
-        if not line or line.startswith("'"):
+        if not line or line.startswith("'") or line.startswith("#"):
             continue  # Пропускаем пустые строки и комментарии
 
         # Обработка синтаксиса: <function>(...) -> имя;
         match = re.match(r'([\w]+)\((.+)\)\s*->\s*(\w+);', line)
         if match:
             func, content, name = match.groups()
-            # Любой вызов функции интерпретируем как массив
-            data[name] = parse_array(content, data)
+            if func == 'pow':
+                # Evaluate power function
+                base, exp = map(int, content.split(','))
+                data[name] = pow(base, exp)
+            else:
+                # Interpret any other function call as an array
+                data[name] = parse_array(content, data)
             continue
 
         # Обработка выражений: {выражение} -> имя;
@@ -28,8 +33,15 @@ def parse_file(file_path):
             data[name] = eval_constant_expression("{" + expr + "}", data)
             continue
 
+        # Обработка констант: значение -> имя;
+        match = re.match(r'(\d+)\s*->\s*(\w+);', line)
+        if match:
+            value, name = match.groups()
+            data[name] = int(value)
+            continue
+
         # Вывод ошибок для неподдерживаемого синтаксиса
-        print(f"Syntax error: {line}")
+        raise SyntaxError(f"Syntax error: {line}")
 
     return data
 
@@ -80,13 +92,15 @@ def split_array_elements(array_content):
 def eval_constant_expression(expr, data):
     """Вычисляет значения выражений, поддерживает арифметические операции."""
     expr = expr[1:-1]  # Удаляем { и }
-    tokens = re.split(r'(\s+|\+|\-|\*|/|pow|mod|\(|\))', expr)
+    tokens = re.split(r'(\s+|\+|\-|\*|/|\(|\)|,)', expr)
     tokens = [t.strip() for t in tokens if t.strip()]
 
     # Замена имен на их значения
     for i, token in enumerate(tokens):
         if token in data:
             tokens[i] = str(data[token])
+        elif token.isdigit():
+            tokens[i] = str(token)
 
     # Преобразование в строку для eval
     expr_eval = " ".join(tokens)
