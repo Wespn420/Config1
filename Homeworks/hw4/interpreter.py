@@ -82,11 +82,7 @@ def interpret(binary_file, result_file, memory_range):
 
         tree = ET.ElementTree(root)
         with open(result_file, 'w', encoding='utf-8') as f:
-            tree.write(f, encoding='unicode')
-            # Проверяем, что файл не пустой
-            f.seek(0, 2)  # Перемещаемся в конец файла
-            if f.tell() == 0:
-                raise ValueError("Failed to write XML content - file is empty")
+            tree.write(f, encoding='unicode', xml_declaration=True)
         print("Successfully wrote result file")
     except Exception as e:
         print(f"Error writing result file: {e}")
@@ -99,31 +95,16 @@ if __name__ == "__main__":
 
     binary_file = sys.argv[1]
     result_file = sys.argv[2]
+    
+    # Разбор диапазона памяти (формат: start-end)
     try:
-        # Проверяем существование входного файла
-        if not os.path.exists(binary_file):
-            print(f"Error: Input file '{binary_file}' does not exist")
-            sys.exit(1)
-
-        # Парсим диапазон памяти из строки вида "0-5"
-        try:
-            start, end = map(int, sys.argv[3].split('-'))
-            memory_range = [start, end]
-        except ValueError:
-            print(f"Error: Invalid memory range format. Expected 'start-end', got '{sys.argv[3]}'")
-            sys.exit(1)
-
-        # Запускаем интерпретатор
-        try:
-            interpret(binary_file, result_file, memory_range)
-        except Exception as e:
-            print(f"Error during interpretation: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
-
+        start, end = map(int, sys.argv[3].split('-'))
+        if start < 0 or end >= 1024 or start > end:
+            raise ValueError(f"Invalid memory range: {start}-{end}")
+        memory_range = (start, end)
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error parsing memory range: {e}")
+        print("Memory range should be in format: start-end (e.g., 0-5)")
         sys.exit(1)
+
+    interpret(binary_file, result_file, memory_range)
