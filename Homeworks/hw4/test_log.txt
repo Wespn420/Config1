@@ -1,0 +1,8 @@
+command=LOAD_CONST
+operand=42
+command=WRITE_MEM
+operand=0
+command=READ_MEM
+operand=0
+command=SHIFT_LEFT
+operand=2
