@@ -1,35 +1,12 @@
-' Тестовые данные для проверки парсера
-
-' Простые массивы
-array(1, 2, 3, 4) -> my_array;
-nested_array(5, 6, my_array, 7) -> my_nested_array;
-custom_array(10, 20, 30) -> custom_array_test;
-
-' Вложенные массивы
-deep_nested_array(array(1, 2, 3), nested_array(4, 5, 6), 99) -> my_deep_nested_array;
-
-' Константные выражения
-{10 + 20} -> my_sum;
-{50 - 15} -> my_sub;
-{5 * 6} -> my_mul;
-{pow(2, 3)} -> my_pow;  ' Возведение в степень
-{mod(25, 4)} -> my_mod; ' Остаток от деления
-
-' Массивы с выражениями
-array_with_expr(1, 2, {5 * 2}, 8) -> expr_array;
-nested_array_with_expr(my_array, {10 + 5}, {20 - 3}) -> expr_nested_array;
-
-' Сложные структуры с именами массивов и значениями
-complex_array(my_array, nested_array, 42, my_sum) -> my_complex_array;
-
-' Проверка на использование других пользовательских массивов
-reused_array(my_deep_nested_array, my_complex_array, {100 - 25}) -> my_reused_array;
-
-' Проверка на текстовые строки
-string_array("hello", "world", "parser", "test") -> my_string_array;
-
-' Смешанные массивы (числа, строки, выражения)
-mixed_array(1, "text", {10 + 15}, my_array) -> my_mixed_array;
-
-' Проверка на комбинацию массивов и выражений
-combined_array(array(10, 20), {30 + 40}, deep_nested_array) -> my_combined_array;
+' Конфигурация базы данных
+host('localhost') -> db_host;
+port(5432) -> db_port;
+username('admin') -> db_user;
+password('secret') -> db_password;
+database('myapp') -> db_name;
+' Конфигурация веб-сервера
+server_name('myserver.com') -> server_name;
+listen(80) -> server_port;
+document_root('/var/www/html') -> document_root;
+index_file('index.html') -> index_file;
+error_log('/var/log/nginx/error.log') -> error_log;
