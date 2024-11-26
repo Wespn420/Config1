@@ -28,19 +28,19 @@ def assemble(input_file, binary_file, log_file):
         if command == 'LOAD_CONST':
             # Загрузка константы в регистр
             binary_data.extend([0x9A] + list(operand.to_bytes(4, byteorder='little')))
-            log_entries.append(f'<instruction command="{command}" operand="{operand}"/>')
+            log_entries.append({'command': command, 'operand': operand})
         elif command == 'READ_MEM':
             # Чтение данных из памяти
             binary_data.extend([0xD8] + list(operand.to_bytes(4, byteorder='little')))
-            log_entries.append(f'<instruction command="{command}" operand="{operand}"/>')
+            log_entries.append({'command': command, 'operand': operand})
         elif command == 'WRITE_MEM':
             # Запись данных в память
             binary_data.extend([0x8E] + list(operand.to_bytes(4, byteorder='little')))
-            log_entries.append(f'<instruction command="{command}" operand="{operand}"/>')
+            log_entries.append({'command': command, 'operand': operand})
         elif command == 'SHIFT_LEFT':
             # Сдвиг влево
             binary_data.extend([0x4B] + list(operand.to_bytes(4, byteorder='little')))
-            log_entries.append(f'<instruction command="{command}" operand="{operand}"/>')
+            log_entries.append({'command': command, 'operand': operand})
         else:
             # Обработка неизвестной инструкции
             raise ValueError(f'Unknown command: {command}')
@@ -52,10 +52,13 @@ def assemble(input_file, binary_file, log_file):
     # Запись лога в XML файл
     root = ET.Element('log')
     for entry in log_entries:
-        root.append(ET.fromstring(entry))
+        instruction = ET.SubElement(root, 'instruction')
+        for key, value in entry.items():
+            instruction.set(key, str(value))
 
     tree = ET.ElementTree(root)
-    tree.write(log_file)
+    with open(log_file, 'w', encoding='utf-8') as f:
+        tree.write(f, encoding='unicode', xml_declaration=True)
 
 def check_binary(file_path):
     with open(file_path, 'rb') as f:
