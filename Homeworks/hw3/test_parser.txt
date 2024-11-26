@@ -4,9 +4,11 @@ port(5432) -> db_port;
 username('admin') -> db_user;
 password('secret') -> db_password;
 database('myapp') -> db_name;
+info_about_person('db_host', 'db_port', 'db_user', 'db_password', 'db_name') -> person_info;
 ' Конфигурация веб-сервера
 server_name('myserver.com') -> server_name;
 listen(80) -> server_port;
 document_root('/var/www/html') -> document_root;
 index_file('index.html') -> index_file;
 error_log('/var/log/nginx/error.log') -> error_log;
+info_about_db('server_name', 'server_port', 'document_root', 'index_file', 'error_log') -> db_info;
