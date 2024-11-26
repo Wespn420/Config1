@@ -50,42 +50,56 @@ def eval_expression(expr, data):
     """Оценивает значение выражения или возвращает ссылку на данные."""
     if expr.isdigit():
         return int(expr)
-    elif expr.startswith('"') and expr.endswith('"'):
-        return expr.strip('"')
+    elif expr.startswith("'") and expr.endswith("'"):
+        # Возвращаем строку как есть, без добавления дополнительных кавычек
+        return expr
     elif expr.startswith("{") and expr.endswith("}"):
         return eval_constant_expression(expr, data)
     elif "(" in expr and ")" in expr:  # Обрабатываем вложенные массивы
-        return parse_array(expr[expr.index("(") + 1 : expr.rindex(")")], data)
-    else:
-        return data.get(expr, expr)  # Ссылка на ранее определенные данные или значение
+        func_name = expr[:expr.index("(")]
+        if func_name == "pow":
+            args = expr[expr.index("(")+1:expr.index(")")].split(",")
+            return pow(int(args[0]), int(args[1]))
+        else:
+            content = expr[expr.index("(")+1:expr.index(")")]
+            return parse_array(content, data)
+    return data.get(expr, expr)  # Ссылка на ранее определенные данные или значение
 
 
 def parse_array(content, data):
     """Парсинг содержимого массива, включая вложенные структуры."""
+    content = content.strip()  # Remove leading/trailing whitespace
     elements = split_array_elements(content)
-    return [eval_expression(element, data) for element in elements]
+    result = []
+    for element in elements:
+        element = element.strip()
+        # Обрабатываем все элементы одинаково
+        result.append(eval_expression(element, data))
+    return result
 
 
 def split_array_elements(array_content):
     """Разделяет элементы массива, учитывая вложенные структуры."""
     elements = []
-    buffer = ""
-    depth = 0
-
+    current = ""
+    nesting = 0
+    
     for char in array_content:
-        if char == ',' and depth == 0:
-            elements.append(buffer.strip())
-            buffer = ""
+        if char in '({[':  # Handle nested structures
+            nesting += 1
+            current += char
+        elif char in ')}]':
+            nesting -= 1
+            current += char
+        elif char == ',' and nesting == 0:  # Split only at top-level commas
+            elements.append(current.strip())
+            current = ""
         else:
-            if char == '(':
-                depth += 1
-            elif char == ')':
-                depth -= 1
-            buffer += char
-
-    if buffer.strip():
-        elements.append(buffer.strip())
-
+            current += char
+    
+    if current:  # Add the last element
+        elements.append(current.strip())
+    
     return elements
 
 
@@ -111,20 +125,33 @@ def eval_constant_expression(expr, data):
 
 
 def write_toml(data, output_path):
-    with open(output_path, 'w') as file:
-        toml.dump(data, file)
+    """Записывает данные в TOML файл."""
+    print(f"Writing data to {output_path}:")
+    print("Data to write:", data)
+    try:
+        with open(output_path, 'w') as file:
+            toml.dump(data, file)
+        print(f"Successfully wrote to {output_path}")
+    except Exception as e:
+        print(f"Error writing to file: {e}")
 
 
 def main():
     if len(sys.argv) != 3:
         print("Usage: python parser.py <input_file> <output_file>")
-        return
+        sys.exit(1)
 
     input_file = sys.argv[1]
     output_file = sys.argv[2]
-
-    data = parse_file(input_file)
-    write_toml(data, output_file)
+    
+    try:
+        print(f"Parsing file: {input_file}")
+        data = parse_file(input_file)
+        print("Parsed data:", data)
+        write_toml(data, output_file)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
