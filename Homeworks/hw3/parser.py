@@ -51,7 +51,7 @@ def eval_expression(expr, data):
     if expr.isdigit():
         return int(expr)
     elif expr.startswith("'") and expr.endswith("'"):
-        # Возвращаем строку как есть, без добавления дополнительных кавычек
+        # Возвращаем строку в кавычках как есть
         return expr
     elif expr.startswith("{") and expr.endswith("}"):
         return eval_constant_expression(expr, data)
@@ -63,18 +63,43 @@ def eval_expression(expr, data):
         else:
             content = expr[expr.index("(")+1:expr.index(")")]
             return parse_array(content, data)
-    return data.get(expr, expr)  # Ссылка на ранее определенные данные или значение
+    # Если это переменная, проверяем её наличие в data
+    if expr in data:
+        return data[expr]
+    raise ValueError(f"Undefined variable or missing quotes: '{expr}'. If this is a string, it should be in single quotes.")
 
 
 def parse_array(content, data):
     """Парсинг содержимого массива, включая вложенные структуры."""
-    content = content.strip()  # Remove leading/trailing whitespace
+    content = content.strip()
+    if not content:  # Если содержимое пустое, возвращаем пустой массив
+        return []
+    
     elements = split_array_elements(content)
     result = []
     for element in elements:
         element = element.strip()
-        # Обрабатываем все элементы одинаково
-        result.append(eval_expression(element, data))
+        if element.startswith("'") and element.endswith("'"):
+            # Строки в кавычках оставляем как есть
+            result.append(element)
+        elif element.isdigit():
+            # Числовые значения преобразуем в int
+            result.append(int(element))
+        elif element.startswith("array("):
+            # Рекурсивно обрабатываем вложенные массивы
+            inner_content = element[element.index("(")+1:element.rindex(")")]
+            result.append(parse_array(inner_content, data))
+        elif "pow(" in element:
+            # Обработка функции pow
+            args = element[element.index("(")+1:element.rindex(")")].split(",")
+            result.append(pow(int(args[0].strip()), int(args[1].strip())))
+        else:
+            # Если это переменная, проверяем её наличие в data
+            if element in data:
+                result.append(data[element])
+            else:
+                raise ValueError(f"Undefined variable or missing quotes: '{element}'. If this is a string, it should be in single quotes.")
+    
     return result
 
 
@@ -124,14 +149,22 @@ def eval_constant_expression(expr, data):
         raise ValueError(f"Error evaluating expression '{expr}': {e}")
 
 
+def clean_array(value):
+    """Очищает массив от лишних запятых."""
+    if isinstance(value, list):
+        return [clean_array(item) for item in value]
+    return value
+
 def write_toml(data, output_path):
     """Записывает данные в TOML файл."""
-    print(f"Writing data to {output_path}:")
-    print("Data to write:", data)
+    # Очищаем данные от лишних запятых
+    cleaned_data = {}
+    for key, value in data.items():
+        cleaned_data[key] = clean_array(value)
+    
     try:
         with open(output_path, 'w') as file:
-            toml.dump(data, file)
-        print(f"Successfully wrote to {output_path}")
+            toml.dump(cleaned_data, file)
     except Exception as e:
         print(f"Error writing to file: {e}")
 
