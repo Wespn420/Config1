@@ -1,15 +1,15 @@
 ' Конфигурация базы данных
-array(localhost) -> db_host;
-array(5432) -> db_port;
-array(admin) -> db_user;
-array(secret) -> db_password;
-array(myapp) -> db_name;
+array('localhost') -> db_host;
+array('5432') -> db_port;
+array('admin') -> db_user;
+array('secret') -> db_password;
+array('myapp') -> db_name;
 array(db_host, db_port, db_user, db_password, db_name) -> db_info;
 
 ' Конфигурация веб-сервера
-array(myserver.com) -> server_name;
-array(80) -> server_port;
-array(/var/www/html) -> document_root;
-array(index.html) -> index_file;
-array(/var/log/nginx/error.log) -> error_log;
+array('myserver.com') -> server_name;
+array('80') -> server_port;
+array('/var/www/html') -> document_root;
+array('index.html') -> index_file;
+array('/var/log/nginx/error.log') -> error_log;
 array(server_name, server_port, document_root, index_file, error_log) -> server_info;
