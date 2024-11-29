@@ -15,8 +15,9 @@ def assemble(input_file, binary_file, log_file):
 
     # Обрабатываем каждую строку входного файла
     for line in lines:
-        line = line.strip()
-        if not line or line.startswith('#'):
+        # Удаляем комментарии и пробелы
+        line = line.split('#')[0].strip()
+        if not line:  # Пропускаем пустые строки и комментарии
             continue
 
         # Разбор строки с инструкцией
@@ -59,6 +60,10 @@ def assemble(input_file, binary_file, log_file):
     tree = ET.ElementTree(root)
     with open(log_file, 'w', encoding='utf-8') as f:
         tree.write(f, encoding='unicode', xml_declaration=True)
+
+    # Выводим сгенерированный бинарный код для проверки
+    hex_content = ' '.join(f'0x{b:02X}' for b in binary_data)
+    print(hex_content)
 
 def check_binary(file_path):
     with open(file_path, 'rb') as f:
