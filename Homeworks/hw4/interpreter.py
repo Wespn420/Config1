@@ -51,12 +51,13 @@ def interpret(binary_file, result_file, memory_range):
                 memory[operand] = value
                 print(f"WRITE_MEM {operand}, value={value}, stack: {stack}")
             elif opcode == 0x4B:  # SHIFT_LEFT
-                if not stack:
-                    raise ValueError("Stack is empty during SHIFT_LEFT")
-                value = stack.pop()
-                result = value << 1
+                if len(stack) < 2:
+                    raise ValueError("SHIFT_LEFT requires two values on stack")
+                shift_amount = stack.pop()  # Количество позиций для сдвига
+                value = stack.pop()        # Значение для сдвига
+                result = value << shift_amount
                 stack.append(result)
-                print(f"SHIFT_LEFT: value={value}, shift by 1, result={result}, stack: {stack}")
+                print(f"SHIFT_LEFT: value={value}, shift by {shift_amount}, result={result}, stack: {stack}")
             else:
                 raise ValueError(f'Unknown opcode: {hex(opcode)}')
     except Exception as e:
