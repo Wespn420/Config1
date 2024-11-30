@@ -1,6 +1,9 @@
 import pytest
 import subprocess
 import os
+import assembler
+import interpreter
+import xml.etree.ElementTree as ET
 
 @pytest.fixture(scope="function")
 def setup_and_teardown():
@@ -34,10 +37,11 @@ def test_shift_left_vectors(setup_and_teardown):
             for i in range(6):
                 f.write(f'LOAD_CONST {i+1}\nWRITE_MEM {i}\n')
             
-            # Для каждого элемента: читаем из памяти, сдвигаем и записываем обратно
+            # Для каждого элемента: читаем из памяти, загружаем значение сдвига и выполняем сдвиг
             for i in range(6):
                 f.write(f'READ_MEM {i}\n')  # Читаем значение
-                f.write(f'SHIFT_LEFT 1\n')  # Сдвигаем влево
+                f.write(f'LOAD_CONST 1\n')   # Загружаем величину сдвига
+                f.write(f'SHIFT_LEFT\n')     # Сдвигаем влево
                 f.write(f'WRITE_MEM {i}\n')  # Записываем обратно
 
         # Выводим содержимое тестовой программы
@@ -160,3 +164,79 @@ def test_instruction_format(setup_and_teardown):
         if os.path.exists(result_output_path):
             print(f"result.xml exists, size: {os.path.getsize(result_output_path)} bytes")
         raise
+
+
+def test_vector_shift(setup_and_teardown):
+    """
+    Тест программы vector_shift.asm, которая выполняет поэлементный побитовый сдвиг влево
+    над двумя векторами длины 6, записывая результат в первый вектор
+    """
+    # Путь к тестовым файлам
+    asm_file = "vector_shift.asm"
+    bin_file = "vector_shift.bin"
+    log_file = "vector_shift_log.xml"
+    result_file = "vector_shift_result.xml"
+
+    try:
+        # Запускаем ассемблер
+        subprocess.run(['python', 'assembler.py', asm_file, bin_file, log_file], check=True)
+        assert os.path.exists(bin_file), "Бинарный файл не создан"
+        
+        # Запускаем интерпретатор
+        subprocess.run(['python', 'interpreter.py', bin_file, result_file, '0-11'], check=True)
+        assert os.path.exists(result_file), "Файл результатов не создан"
+        
+        # Читаем результаты из XML файла
+        tree = ET.parse(result_file)
+        root = tree.getroot()
+        memory = {}
+        for mem_elem in root.findall('.//memory'):
+            addr = int(mem_elem.get('address'))
+            value = int(mem_elem.get('value'))
+            memory[addr] = value
+        
+        # Проверяем результаты сдвига
+        expected_results = {
+            0: 10 << 2,  # 40 (сдвиг 10 на 2 позиции)
+            1: 20 << 3,  # 160 (сдвиг 20 на 3 позиции)
+            2: 30 << 1,  # 60 (сдвиг 30 на 1 позицию)
+            3: 40 << 4,  # 640 (сдвиг 40 на 4 позиции)
+            4: 50 << 2,  # 200 (сдвиг 50 на 2 позиции)
+            5: 60 << 3,  # 480 (сдвиг 60 на 3 позиции)
+        }
+        
+        # Проверяем второй вектор (не должен измениться)
+        expected_shifts = {
+            6: 2,
+            7: 3,
+            8: 1,
+            9: 4,
+            10: 2,
+            11: 3
+        }
+        
+        # Проверяем результаты первого вектора
+        for addr, expected in expected_results.items():
+            assert memory[addr] == expected, f"Неверный результат сдвига в ячейке {addr}: ожидалось {expected}, получено {memory[addr]}"
+        
+        # Проверяем, что второй вектор не изменился
+        for addr, expected in expected_shifts.items():
+            assert memory[addr] == expected, f"Второй вектор был изменен в ячейке {addr}: ожидалось {expected}, получено {memory[addr]}"
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error during test execution: {e}")
+        if os.path.exists(bin_file):
+            print(f"{bin_file} exists, size: {os.path.getsize(bin_file)} bytes")
+        else:
+            print(f"{bin_file} does not exist")
+        if os.path.exists(result_file):
+            print(f"{result_file} exists, size: {os.path.getsize(result_file)} bytes")
+        else:
+            print(f"{result_file} does not exist")
+        raise
+
+    finally:
+        # Очистка тестовых файлов
+        for file in [bin_file, log_file, result_file]:
+            if os.path.exists(file):
+                os.remove(file)
